@@ -12,11 +12,8 @@
  * @section intro_sec Introduction
  *
  * The PTimer library is a very small, easy and portable timer library\n
- * You can create, use, modify, reuse and destroy single-shot or periodic\n
- * timers.
- * The library has just an header to include and just a single .C source file\n
- * to compile. It has been tested in windows (mingw/cygwin/visual studio) and\n
- * Linux.
+ * You can create, use, modify, reuse and destroy single-shot or periodic timers.\n
+ * The library has just an header to include and just a single .C source file to compile.
  *
  * Remember to define \b PTIMER_SHARED_BUILD when building a DLL, and\n
  * define PTIMER_SHARED when using the DLL.
@@ -71,19 +68,6 @@ typedef enum {
 } ptimer_type;
 
 /**
- * @enum ptimer_wait_mode
- * When destroying a timer, given interval time is the maximum time that caller
- * may wait. Specifying PTIMER_NO_WAIT, ptimer_destroy() returns immediately,
- * and the timer resources will be released after current timeout expires.
- * If application exits \b before this happens, you will have (harmless) leaks
- */
-typedef enum {
-    PTIMER_NO_WAIT, /**< ptimer_destroy() returns immediately        */
-    PTIMER_WAIT     /**< ptimer_destroy() wait for timer destruction */
-} ptimer_wait_mode;
-
-
-/**
  * @brief Create a new timer
  * @param[in,out] timer_address A pointer to the timer to create
  * @param[in] type The type of timer, see ::ptimer_type
@@ -116,6 +100,13 @@ PTIMER_API void ptimer_start(ptimer_ptr_t p_timer);
 PTIMER_API void ptimer_stop(ptimer_ptr_t p_timer);
 
 /**
+ * @brief Destroy a previously created timer
+ * @param[in] p_timer Pointer to timer to destroy
+ * \see ptimer_create()
+ */
+PTIMER_API void ptimer_destroy(ptimer_ptr_t p_timer);
+
+/**
  * @brief Summary
  * @param[in] p_timer Pointer to timer
  * @param[in] timeout The new timeout in \b milliseconds
@@ -137,23 +128,6 @@ PTIMER_API void ptimer_set_callback(ptimer_ptr_t p_timer,
  */
 PTIMER_API void ptimer_set_callback_argument(ptimer_ptr_t p_timer,
                                              void* callback_arg);
-
-/**
- * @brief Destroy a previously created timer
- * @param[in] p_timer Pointer to timer to destroy
- * @param[in] wait_mode Decide if issue synchronous or asynchronous call, see
- * ::ptimer_wait_mode
- * \see ptimer_create()
- */
-PTIMER_API void ptimer_destroy(ptimer_ptr_t p_timer,
-                               ptimer_wait_mode wait_mode);
-
-/**
- * @brief Tell if given timer is running
- * @param[in] p_timer Pointer to timer
- * @return Non-zero if timer is running, zero otherwise
- */
-PTIMER_API int ptimer_is_running(const ptimer_ptr_t p_timer);
 
 /**
  * @brief Utility functions to make a thread sleep

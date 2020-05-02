@@ -2,79 +2,25 @@
 
 #ifdef _WIN32
 #   define WIN32_LEAN_AND_MEAN
-#   include <Windows.h>
+#   include <windows.h>
 #else
 #   include <unistd.h>
 #endif
 
 #include <stdlib.h>
-#include <pthread.h>
+#include <time.h>
 #include <semaphore.h>
 #include <signal.h>
-
-
-typedef enum {
-    STATUS_RUNNING,
-    STATUS_NOT_RUNNING,
-    STATUS_DESTROYED
-} timer_status_t;
+#include <errno.h>
 
 struct ptimer {
-    pthread_t           thread;
     sem_t               semaphore;
     ptimer_callback_t   callback;
     void*               callback_argument;
     ptimer_type         type;
     unsigned int        interval;
-    timer_status_t      status;
+    int                 is_ready;
 };
-
-
-static void* runner(void* p_thread_argument)
-{
-    struct ptimer* const p = (struct ptimer*)p_thread_argument;
-
-    while (p->status != STATUS_DESTROYED) {
-
-        sem_wait(&p->semaphore);
-
-        while (p->status == STATUS_RUNNING) {
-
-            ptimer_sleep(p->interval);
-
-            if (p->status == STATUS_RUNNING) {
-
-                (*p->callback)(p->callback_argument);
-
-                if (p->type == PTIMER_SINGLE_SHOT) {
-                    p->status = STATUS_NOT_RUNNING;
-                }
-            }
-        }
-    }
-
-    sem_destroy(&p->semaphore);
-    free(p_thread_argument);
-
-    pthread_exit(NULL);
-
-    return NULL;
-}
-
-static void set_status(ptimer_ptr_t p_timer, timer_status_t status)
-{
-    struct ptimer* const p = (struct ptimer* const)p_timer;
-    p->status = status;
-}
-
-void ptimer_sleep(unsigned int interval)
-{
-#ifdef _WIN32
-    Sleep((DWORD)interval);
-#else
-    usleep((useconds_t)(interval * 1000));
-#endif
-}
 
 int ptimer_create(ptimer_ptr_t* p_timer_address,
                   ptimer_type type,
@@ -82,28 +28,22 @@ int ptimer_create(ptimer_ptr_t* p_timer_address,
                   ptimer_callback_t callback,
                   void* callback_argument)
 {
-    struct ptimer* const p = malloc(sizeof(struct ptimer));
     int ok = 0;
+    struct ptimer* const p = malloc(sizeof(struct ptimer));
 
     if (p != NULL) {
 
-        p->callback          = callback;
-        p->callback_argument = callback_argument;
-        p->type              = type;
-        p->interval          = interval;
-        p->status            = STATUS_NOT_RUNNING;
+        if (sem_init(&p->semaphore, 0, 0U) == 0) {
 
-        if (sem_init(&p->semaphore, 0, 0) == 0) {
+            p->callback          = callback;
+            p->callback_argument = callback_argument;
+            p->type              = type;
+            p->interval          = interval;
+            p->is_ready          = -1;
 
-            if (pthread_create(&p->thread, NULL, &runner, p) == 0) {
-                *p_timer_address = p;
-                ok = 1;
-            }
-            else {
-                sem_destroy(&p->semaphore);
-                *p_timer_address = NULL;
-                free(p);
-            }
+            *p_timer_address = p;
+
+            ok--;
         }
         else {
             *p_timer_address = NULL;
@@ -116,55 +56,60 @@ int ptimer_create(ptimer_ptr_t* p_timer_address,
 
 void ptimer_start(ptimer_ptr_t p_timer)
 {
-    struct ptimer* const p = (struct ptimer* const)p_timer;
+    struct ptimer* const p = (struct ptimer*)p_timer;
+    const int periodic = p->type == PTIMER_PERIODIC;
+    struct timespec ts;
 
-    if (p->status == STATUS_NOT_RUNNING) {
-        set_status(p_timer, STATUS_RUNNING);
-        sem_post(&p->semaphore);
-    }
+    do {
+        if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {
+            const unsigned int interval = p->interval;
+            ts.tv_sec  += (time_t)(interval / 1000U);
+            ts.tv_nsec += (long)((interval % 1000U) * 1000000);
+            while (sem_timedwait(&p->semaphore, &ts) == -1 && errno == EINTR) {
+                continue;
+            }
+        }
+        p->callback(p->callback_argument);
+    } while (periodic != 0 && p->is_ready != 0);
 }
 
 void ptimer_stop(ptimer_ptr_t p_timer)
 {
-    set_status(p_timer, STATUS_NOT_RUNNING);
+    struct ptimer* const p = (struct ptimer*)p_timer;
+    p->is_ready = 0;
+    sem_post(&p->semaphore);
+}
+
+void ptimer_destroy(ptimer_ptr_t p_timer)
+{
+    struct ptimer* const p = (struct ptimer* const)p_timer;
+    sem_destroy(&p->semaphore);
+    free(p_timer);
 }
 
 void ptimer_set_timeout(ptimer_ptr_t p_timer, unsigned int timeout)
 {
-    struct ptimer* const p = (struct ptimer* const)p_timer;
+    struct ptimer* const p = (struct ptimer*)p_timer;
     p->interval = timeout;
 }
 
 void ptimer_set_callback(ptimer_ptr_t p_timer, ptimer_callback_t new_callback)
 {
-    struct ptimer* const p = (struct ptimer* const)p_timer;
+    struct ptimer* const p = (struct ptimer*)p_timer;
     p->callback = new_callback;
 }
 
 void ptimer_set_callback_argument(ptimer_ptr_t p_timer, void* callback_argument)
 {
-    struct ptimer* const p = (struct ptimer* const)p_timer;
+    struct ptimer* const p = (struct ptimer*)p_timer;
     p->callback_argument = callback_argument;
 }
 
-void ptimer_destroy(ptimer_ptr_t p_timer, ptimer_wait_mode wait_mode)
+void ptimer_sleep(unsigned int interval)
 {
-    if (wait_mode == PTIMER_WAIT || wait_mode == PTIMER_NO_WAIT) {
-        struct ptimer* const p = (struct ptimer* const)p_timer;
-
-        set_status(p_timer, STATUS_DESTROYED);
-
-        sem_post(&p->semaphore);
-
-        if (wait_mode == PTIMER_WAIT) {
-            void* retval;
-            pthread_join(p->thread, &retval);
-        }
-    }
-}
-
-int ptimer_is_running(const ptimer_ptr_t p_timer)
-{
-    const struct ptimer* const p = (const struct ptimer*)p_timer;
-    return p->status == STATUS_RUNNING;
+#ifdef _WIN32
+    Sleep((DWORD)interval);
+#else
+    usleep((useconds_t)(interval * 1000U));
+#endif
 }

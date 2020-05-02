@@ -1,101 +1,75 @@
 #include <stdio.h>
-#include <assert.h>
 #include "ptimer.h"
 
-
-static ptimer_ptr_t p_periodic;
-static ptimer_ptr_t timer;
-static int done;
-
-
-static void cb_periodic(void* argument)
+static void cb_periodic(void* arg)
 {
-    printf("timer callback reports: <%s>\n", (char*)argument);
-}
+    static unsigned int counter = 0;
 
-static void cb_single(void* argument)
-{
-    puts("timer single callback");
+    if (++counter == 3) {
+        puts("Goodbye by periodic timer");
 
-    (void)argument;
-}
+        /* Here you can change callback, interval ... */
 
-static void cb_test2(void* argument)
-{
-    static int counter = 0;
-
-    printf("cb2 says: <%s>\n", (char*)argument);
-
-    if (++counter == 8) {
-        puts("DONE");
-        done--;
-        assert(ptimer_is_running(timer));
-        ptimer_stop(timer);
+        ptimer_stop((ptimer_ptr_t)arg); /* ... and even stop the timer! */
+    }
+    else {
+        puts("Hello by periodic timer");
     }
 }
 
-static void cb_test(void* argument)
+static void test_periodic(void)
 {
-    static int counter = 0;
-    printf("cb1 says: %s\n", (char*)argument);
+    ptimer_ptr_t periodic;
 
-    if (++counter == 5) {
-        ptimer_set_callback(timer, &cb_test2);
-        ptimer_set_callback_argument(timer, "MSG2");
-        ptimer_set_timeout(timer, 500);
+    if (ptimer_create(&periodic,
+                      PTIMER_PERIODIC,
+                      PTIMER_SECONDS(1),
+                      &cb_periodic,
+                      NULL)
+        == 0)
+    {
+        puts("Cannot create periodic timer");
     }
+
+    /* Pass the timer to its callback, cannot be passed at creation time */
+    ptimer_set_callback_argument(periodic, periodic);
+
+    ptimer_start(periodic);
+
+    puts("Periodic timer finished");
+
+    ptimer_destroy(periodic);
 }
 
-static void test(void)
+static void cb_single(void* arg)
 {
-    if (ptimer_create(&timer, PTIMER_PERIODIC, 1000, &cb_test, "MSG1") != 0) {
-        ptimer_start(timer);
-        while (!done) ptimer_sleep(100);
-        assert(!ptimer_is_running(timer));
-        puts("Destorying timer...");
-        ptimer_destroy(timer, PTIMER_WAIT);
+    puts((const char*)arg);
+}
+
+static void test_single(void)
+{
+    ptimer_ptr_t single;
+    const char* msg = "Hello from single timer";
+
+    if (ptimer_create(&single,
+                      PTIMER_SINGLE_SHOT,
+                      PTIMER_SECONDS(2),
+                      &cb_single,
+                      (void*)msg)
+        == 0)
+    {
+        puts("Cannot create single timer");
     }
-    else assert(0);
+
+    ptimer_start(single);
+    ptimer_destroy(single);
 }
 
 int main(void)
 {
-    const char* msg = "Hello";
-    ptimer_ptr_t p_single;
-
-    if (ptimer_create(&p_periodic,
-                      PTIMER_PERIODIC,
-                      PTIMER_SECONDS(2),
-                      &cb_periodic,
-                      (void*)msg)
-        == 0)
-    {
-        puts("Cannot create timer");
-        return 1;
-    }
-
-    if (ptimer_create(&p_single,
-                      PTIMER_SINGLE_SHOT,
-                      PTIMER_SECONDS(1),
-                      &cb_single,
-                      NULL)
-        == 0)
-    {
-        puts("Cannot create timer");
-        ptimer_destroy(p_periodic, PTIMER_NO_WAIT);
-        return 1;
-    }
-
-    ptimer_start(p_periodic);
-
-    ptimer_sleep(PTIMER_SECONDS(4));
-
-    ptimer_start(p_single);
-
-    test();
-
-    ptimer_destroy(p_single, PTIMER_WAIT);
-    ptimer_destroy(p_periodic, PTIMER_WAIT);
-
+    test_single();
+    test_periodic();
+    puts("Timers finished, exiting in 2 seconds...");
+    ptimer_sleep(PTIMER_SECONDS(2));
     return 0;
 }
