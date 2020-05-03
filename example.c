@@ -62,6 +62,8 @@ static void test_single(void)
     }
 
     ptimer_start(single);
+    ptimer_start(single); /* Restart a single-shot timer */
+
     ptimer_destroy(single);
 }
 
