@@ -10,7 +10,6 @@
 #include <stdlib.h>
 #include <time.h>
 #include <semaphore.h>
-#include <signal.h>
 #include <errno.h>
 
 struct ptimer {
