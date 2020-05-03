@@ -45,7 +45,6 @@ int ptimer_create(ptimer_ptr_t* p_timer_address,
             ok--;
         }
         else {
-            *p_timer_address = NULL;
             free(p);
         }
     }
