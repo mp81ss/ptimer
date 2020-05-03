@@ -64,7 +64,11 @@ void ptimer_start(ptimer_ptr_t p_timer)
         if (clock_gettime(CLOCK_REALTIME, &ts) == 0) {
             const unsigned int interval = p->interval;
             ts.tv_sec  += (time_t)(interval / 1000U);
-            ts.tv_nsec += (long)((interval % 1000U) * 1000000);
+            ts.tv_nsec += (long)((interval % 1000U) * 1000000L);
+            if (ts.tv_nsec >= 1000000000L) {
+                ts.tv_sec++;
+                ts.tv_nsec -= 1000000000L;
+            }
             while (sem_timedwait(&p->semaphore, &ts) == -1 && errno == EINTR) {
                 continue;
             }
