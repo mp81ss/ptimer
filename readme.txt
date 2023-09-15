@@ -1,3 +1,6 @@
+# ARCHIVED - Moved to gitlab
+
+
 PTimer is a very small and easy but flexible timer library.
 
 It is written in pure C and consists of one header and one .C source file only.
